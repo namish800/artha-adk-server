@@ -12,6 +12,14 @@ from fi_mcp_agent.utils.tracing import CloudTraceLoggingSpanExporter
 from fi_mcp_agent.utils.typing import Feedback
 
 from dotenv import load_dotenv
+# from phoenix.otel import register
+
+# # Configure the Phoenix tracer
+# tracer_provider = register(
+#     project_name="artha",  # Default is 'default'
+#     auto_instrument=True        # Auto-instrument your app based on installed OI dependencies
+# )
+
 load_dotenv()
 
 _, project_id = google.auth.default()
