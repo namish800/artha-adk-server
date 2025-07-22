@@ -39,22 +39,11 @@ pip install -r requirements.txt
 
 ### 4. Environment Configuration
 
-Create a `.env` file in the root directory and configure your environment variables:
+The application uses centralized configuration via the `settings.py` file. All settings can be overridden using environment variables or a `.env` file.
 
-```bash
-GOOGLE_GENAI_USE_VERTEXAI=
+Create a `.env` file in the root directory and configure your environment variables. Copy from `.env.example`
 
-
-GOOGLE_CLOUD_PROJECT=
-GOOGLE_CLOUD_LOCATION=
-GOOGLE_CLOUD_STORAGE_BUCKET=
-
-
-SUPABASE_DB_CONN_STRING=
-
-# CORS allowed origins (optional, comma-separated)
-ALLOW_ORIGINS=http://localhost:3000,http://localhost:8080
-```
+All settings have sensible defaults, so you only need to set the variables you want to override.
 
 ## Running the Server
 
@@ -75,6 +64,7 @@ artha-agent/
 │   └── utils/             # Utility modules
 ├── requirements.txt       # Python dependencies
 ├── server.py             # FastAPI server entry point
+├── settings.py           # Centralized configuration
 └── README.md             # This file
 ```
 
