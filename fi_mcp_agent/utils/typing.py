@@ -44,3 +44,9 @@ class Feedback(BaseModel):
     log_type: Literal["feedback"] = "feedback"
     service_name: Literal["artha-agent"] = "artha-agent"
     user_id: str = ""
+
+class FIRequest(BaseModel):
+    """Represents the input for a chat request with optional configuration."""
+    user_id: str
+    session_id: str
+    message: str

@@ -5,6 +5,13 @@ from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset
 from google.adk.tools.base_tool import BaseTool
 from google.adk.tools.tool_context import ToolContext
 
+toolset = MCPToolset(
+            connection_params=StreamableHTTPServerParams(
+                url='https://mcp.fi.money:8080/mcp/stream'
+            ),
+            errlog=None
+        )
+
 # Clean agent definition for deployment with MCP session persistence
 root_agent = LlmAgent(
     model='gemini-2.0-flash',
@@ -14,11 +21,6 @@ root_agent = LlmAgent(
     You can access their Fi Money account data including transactions, net worth, credit reports, and more.
     Always be helpful and provide clear, actionable financial insights.""",
     tools=[
-        MCPToolset(
-            connection_params=StreamableHTTPServerParams(
-                url='https://mcp.fi.money:8080/mcp/stream'
-            ),
-            errlog=None
-        ),
+        toolset
     ]
 )

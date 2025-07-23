@@ -1,13 +1,15 @@
 import google.auth
-from fastapi import FastAPI
-from google.adk.cli.fast_api import get_fast_api_app
+import json
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import StreamingResponse
+from fast_api_custom import get_fast_api_app
 from google.cloud import logging as google_cloud_logging
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider, export
 
 from fi_mcp_agent.utils.gcs import create_bucket_if_not_exists
 from fi_mcp_agent.utils.tracing import CloudTraceLoggingSpanExporter
-from fi_mcp_agent.utils.typing import Feedback
+from fi_mcp_agent.utils.typing import Feedback, FIRequest
 from settings import settings
 # from phoenix.otel import register
 
@@ -70,5 +72,4 @@ def ping():
 # Main execution
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(app, host=settings.server_host, port=settings.server_port)
