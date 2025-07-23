@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     # Tracing Configuration
     trace_to_cloud: bool = Field(default=True, description="Enable cloud tracing")
     debug_mode: bool = Field(default=False, description="Enable debug mode")
+
+    # Memory Configuration
+    memory_service_id: str = Field(default="", description="Memory service ID")
+    memory_service_uri: str = Field(description="Memory service uri")
     
     class Config:
         env_file = ".env"

@@ -7,16 +7,16 @@ from google.cloud import logging as google_cloud_logging
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider, export
 
-from fi_mcp_agent.utils.gcs import create_bucket_if_not_exists
-from fi_mcp_agent.utils.tracing import CloudTraceLoggingSpanExporter
-from fi_mcp_agent.utils.typing import Feedback, FIRequest
+from utils.gcs import create_bucket_if_not_exists
+from utils.tracing import CloudTraceLoggingSpanExporter
+from utils.typing import Feedback, FIRequest
 from settings import settings
 # from phoenix.otel import register
 
 import logging  # Import the logging module to configure debug logging
 
 # Configure basic logging to display debug output
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 _, project_id = google.auth.default()
 logging_client = google_cloud_logging.Client()
@@ -47,6 +47,7 @@ app: FastAPI = get_fast_api_app(
     artifact_service_uri=settings.google_cloud_storage_bucket,
     allow_origins=settings.cors_origins,
     session_service_uri=settings.supabase_db_conn_string,
+    memory_service_uri=settings.memory_service_uri,
     trace_to_cloud=settings.trace_to_cloud,
 )
 app.title = settings.app_title
