@@ -13,15 +13,17 @@ from fi_mcp_agent.utils.typing import Feedback, FIRequest
 from settings import settings
 # from phoenix.otel import register
 
-# # Configure the Phoenix tracer
-# tracer_provider = register(
-#     project_name="artha",  # Default is 'default'
-#     auto_instrument=True        # Auto-instrument your app based on installed OI dependencies
-# )
+import logging  # Import the logging module to configure debug logging
+
+# Configure basic logging to display debug output
+logging.basicConfig(level=logging.DEBUG)
 
 _, project_id = google.auth.default()
 logging_client = google_cloud_logging.Client()
+# Enable Cloud Logging to capture messages at DEBUG level
+logging_client.setup_logging(log_level=logging.INFO)
 logger = logging_client.logger(__name__)
+
 
 # Create GCS bucket if needed
 if settings.google_cloud_storage_bucket:

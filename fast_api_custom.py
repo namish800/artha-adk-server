@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import asyncio
+import anyio
 from contextlib import asynccontextmanager
 import json
 import logging
@@ -872,6 +873,9 @@ def get_fast_api_app(
 
     async def event_generator():
       try:
+        # Add heartbeat to keep connection alive during streaming
+        yield f"data: {{\"type\": \"stream_start\", \"session_id\": \"{req.session_id}\"}}\n\n"
+        
         async for event in runner.run_async(
             user_id=req.user_id,
             session_id=req.session_id,
@@ -881,10 +885,13 @@ def get_fast_api_app(
           event_data = event.model_dump_json(exclude_none=True, by_alias=True)
           logger.info("Generated event in agent runv2: %s", event_data)
           yield f"data: {event_data}\n\n"
+        
+        # Signal completion
+        yield f"data: {{\"type\": \"stream_complete\"}}\n\n"
           
       except Exception as e:
         logger.exception("Error in runv2 event_generator: %s", e)
-        yield f'data: {{"error": "{str(e)}"}}\n\n'
+        yield f'data: {{"type": "error", "error": "{str(e)}"}}\n\n'
 
     return StreamingResponse(
         event_generator(),
@@ -892,8 +899,11 @@ def get_fast_api_app(
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering for real-time streaming
         }
     )
+  
+  
 
   @app.post("/run_sse")
   async def agent_run_sse(req: AgentRunRequest) -> StreamingResponse:
@@ -929,6 +939,95 @@ def get_fast_api_app(
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
+    )
+
+  @app.post("/runv3")
+  async def agent_run_v3(req: AgentRunRequest) -> StreamingResponse:
+    """
+    Improved streaming endpoint with cancellation-safe MCP session handling.
+    Uses anyio.CancelScope to shield agent execution from HTTP stream cancellation.
+    """
+    session = await session_service.get_session(
+        app_name=req.app_name, user_id=req.user_id, session_id=req.session_id
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    runner = await _get_runner_async(req.app_name)
+
+    # SSE headers
+    SSE_HEADERS = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive", 
+        "X-Accel-Buffering": "no",
+    }
+    HEARTBEAT_EVERY = 20  # seconds
+
+    # Bridge queue between agent and HTTP stream
+    queue: asyncio.Queue[Event | None] = asyncio.Queue()
+
+    async def pump_agent():
+        """Run the agent in a shielded scope and push events to queue."""
+        with anyio.CancelScope(shield=True):
+            try:
+                async for ev in runner.run_async(
+                    user_id=req.user_id,
+                    session_id=req.session_id,
+                    new_message=req.new_message,
+                ):
+                    await queue.put(ev)
+                logger.info("Agent execution completed for session: %s", req.session_id)
+            except Exception as e:
+                logger.exception("Agent run failed: %s", e)
+                # Create a proper error event matching the Event schema
+                # Note: Adjust this based on your actual Event model structure
+                try:
+                    from google.adk.events.event import Event as EventClass
+                    error_event = EventClass(type="agent_error", message=str(e))
+                    await queue.put(error_event)
+                except:
+                    # Fallback if Event class doesn't support this structure
+                    await queue.put(None)  # Just end the stream on error
+            finally:
+                await queue.put(None)  # sentinel
+
+    pump_task = asyncio.create_task(pump_agent())
+
+    async def event_generator():
+        # Stream start
+        yield f'data: {{"type":"stream_start","session_id":"{req.session_id}"}}\n\n'
+        try:
+            while True:
+                try:
+                    item = await asyncio.wait_for(queue.get(), timeout=HEARTBEAT_EVERY)
+                except asyncio.TimeoutError:
+                    # Heartbeat - proper SSE comment format
+                    yield ": keep-alive\n\n"
+                    continue
+
+                if item is None:  # sentinel => done
+                    break
+
+                payload = item.model_dump_json(exclude_none=True, by_alias=True)
+                logger.info("Streaming event in runv3: %s", payload)
+                yield f"data: {payload}\n\n"
+
+            yield 'data: {"type":"stream_complete"}\n\n'
+        except asyncio.CancelledError:
+            logger.warning("Client disconnected mid-stream, but agent continues running")
+            # Agent keeps running to preserve MCP session - this is the key fix!
+            pass
+        except Exception as e:
+            logger.exception("Error in event_generator: %s", e)
+            yield f'data: {{"type":"error","error":"{str(e)}"}}\n\n'
+        finally:
+            if not pump_task.done():
+                pump_task.cancel()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream", 
+        headers=SSE_HEADERS
     )
 
   @app.get(
