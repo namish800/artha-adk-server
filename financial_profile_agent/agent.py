@@ -2,7 +2,7 @@ from typing import Dict, Any, Optional
 from google.adk.agents.llm_agent import Agent
 
 from tools.fi_tools import toolset
-from financial_profile_agent.prompts import spending_analyzer_prompt, life_stage_agent_prompt, financial_profile_agent_prompt
+from financial_profile_agent.prompts import financial_profile_agent_prompt_2
 
 # spending_analyzer_agent = Agent(
 #     model='gemini-2.0-flash',
@@ -24,7 +24,7 @@ root_agent = Agent(
     model='gemini-2.5-pro',
     name='financial_profile_agent',
     description='A helpful agent that can analyze the user\'s financial profile',
-    instruction=financial_profile_agent_prompt,
+    instruction=financial_profile_agent_prompt_2,
     tools=[toolset]
 )
 
