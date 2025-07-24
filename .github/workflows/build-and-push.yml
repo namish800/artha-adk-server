@@ -43,9 +43,9 @@ jobs:
 
       - name: Prepare app.yaml from template
         run: |
-          sed -e "s|{{DOCKER_IMAGE}}|${{ steps.build.outputs.docker_image }}|g" \
-              -e "s|{{SERVICE_ACCOUNT_EMAIL}}|${{ secrets.SERVICE_ACCOUNT_EMAIL }}|g" \
+          sed -e "s|{{SERVICE_ACCOUNT_EMAIL}}|${{ secrets.SERVICE_ACCOUNT_EMAIL }}|g" \
               app.yaml.tpl > app.yaml
 
       - name: Deploy to App Engine
-        run: gcloud app deploy ./app.yaml --project ${{ env.PROJECT_ID }}
+        run: |
+          gcloud app deploy ./app.yaml --project ${{ env.PROJECT_ID }} --image-url=${{ steps.build.outputs.docker_image }}
