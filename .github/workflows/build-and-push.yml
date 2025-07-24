@@ -37,3 +37,15 @@ jobs:
       - name: Push Docker image to Artifact Registry
         run: |
           docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest
+
+      - name: Prepare app.yaml from template
+        run: |
+          sed -e "s|{{PROJECT_ID}}|${{ secrets.PROJECT_ID }}|g" \
+              -e "s|{{REGION}}|${{ secrets.REGION }}|g" \
+              -e "s|{{REPOSITORY}}|${{ secrets.REPOSITORY }}|g" \
+              -e "s|{{IMAGE_NAME}}|${{ secrets.IMAGE_NAME }}|g" \
+              -e "s|{{SERVICE_ACCOUNT_EMAIL}}|${{ secrets.SERVICE_ACCOUNT_EMAIL }}|g" \
+              app.yaml.tpl > app.yaml
+
+      - name: Deploy to App Engine
+        run: gcloud app deploy ./app.yaml --quiet --project ${{ env.PROJECT_ID }}
