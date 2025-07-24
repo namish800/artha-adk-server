@@ -3,6 +3,7 @@ name: Build and Deploy Docker Image to Google Artifact Registry
 on:
   push:
     branches: [ "main" ] # Triggers on push to 'main' branch
+  workflow_dispatch: # Allows manual triggering from GitHub UI
 
 env:
   PROJECT_ID: ${{ secrets.PROJECT_ID }}
