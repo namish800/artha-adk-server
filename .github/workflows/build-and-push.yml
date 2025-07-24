@@ -46,6 +46,18 @@ jobs:
           sed -e "s|{{SERVICE_ACCOUNT_EMAIL}}|${{ secrets.SERVICE_ACCOUNT_EMAIL }}|g" \
               app.yaml.tpl > app.yaml
 
+      - name: Debug generated app.yaml
+        run: |
+          echo "Generated app.yaml content:"
+          cat app.yaml
+          echo "---"
+          echo "Docker image: ${{ steps.build.outputs.docker_image }}"
+          echo "Service account: ${{ secrets.SERVICE_ACCOUNT_EMAIL }}"
+          
+      - name: Validate app.yaml syntax
+        run: |
+          python3 -c "import yaml; yaml.safe_load(open('app.yaml'))" && echo "YAML syntax is valid" || echo "YAML syntax error detected"
+
       - name: Deploy to App Engine
         run: |
           gcloud app deploy ./app.yaml --project ${{ env.PROJECT_ID }} --image-url=${{ steps.build.outputs.docker_image }}
