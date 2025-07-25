@@ -1,7 +1,7 @@
 from typing import Dict, Any, Optional
 from google.adk.agents.llm_agent import Agent
 
-from tools.fi_tools import toolset
+from tools import fi_toolset
 from financial_profile_agent.prompts import financial_profile_agent_prompt_2
 
 # spending_analyzer_agent = Agent(
@@ -25,7 +25,7 @@ root_agent = Agent(
     name='financial_profile_agent',
     description='A helpful agent that can analyze the user\'s financial profile',
     instruction=financial_profile_agent_prompt_2,
-    tools=[toolset]
+    tools=[fi_toolset]
 )
 
 

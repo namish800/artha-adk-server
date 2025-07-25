@@ -37,6 +37,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from sse_starlette import EventSourceResponse, ServerSentEvent
 from fastapi.websockets import WebSocket
 from fastapi.websockets import WebSocketDisconnect
 from google.genai import types
@@ -942,10 +943,11 @@ def get_fast_api_app(
     )
 
   @app.post("/runv3")
-  async def agent_run_v3(req: AgentRunRequest) -> StreamingResponse:
+  async def agent_run_v3(req: AgentRunRequest) -> EventSourceResponse:
     """
     Improved streaming endpoint with cancellation-safe MCP session handling.
     Uses anyio.CancelScope to shield agent execution from HTTP stream cancellation.
+    Now using sse-starlette for clean SSE event formatting.
     """
     session = await session_service.get_session(
         app_name=req.app_name, user_id=req.user_id, session_id=req.session_id
@@ -955,12 +957,6 @@ def get_fast_api_app(
 
     runner = await _get_runner_async(req.app_name)
 
-    # SSE headers
-    SSE_HEADERS = {
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive", 
-        "X-Accel-Buffering": "no",
-    }
     HEARTBEAT_EVERY = 20  # seconds
 
     # Bridge queue between agent and HTTP stream
@@ -994,41 +990,73 @@ def get_fast_api_app(
     pump_task = asyncio.create_task(pump_agent())
 
     async def event_generator():
-        # Stream start
-        yield f'data: {{"type":"stream_start","session_id":"{req.session_id}"}}\n\n'
+        # Stream start event
+        yield ServerSentEvent(
+            data=f'{{"type":"stream_start","session_id":"{req.session_id}"}}',
+            event="stream_start"
+        )
+        
         try:
             while True:
                 try:
                     item = await asyncio.wait_for(queue.get(), timeout=HEARTBEAT_EVERY)
                 except asyncio.TimeoutError:
-                    # Heartbeat - proper SSE comment format
-                    yield ": keep-alive\n\n"
+                    # Heartbeat using sse-starlette's comment format
+                    yield ServerSentEvent(comment="keep-alive")
                     continue
 
                 if item is None:  # sentinel => done
                     break
+                
+                # Check if this is a render_session function call (can be in any part)
+                item_dict = item.model_dump(exclude_none=True, by_alias=True)
+                render_session_url = None
+                
+                # Look through all parts for render_session function call
+                if item_dict.get("content", {}).get("parts"):
+                    for part in item_dict["content"]["parts"]:
+                        if (part.get("functionCall", {}).get("name") == "render_session"):
+                            render_session_url = part["functionCall"].get("args", {}).get("url", "")
+                            break
+                
+                if render_session_url:
+                    # Send custom render_session event
+                    yield ServerSentEvent(
+                        data=f'{{"type": "render_session", "url": "{render_session_url}"}}',
+                        event="render_session",
+                        id=getattr(item, 'id', None)
+                    )
+                    logger.info("Sent render_session event with URL: %s", render_session_url)
+                else:
+                    # Send regular agent event
+                    payload = item.model_dump_json(exclude_none=True, by_alias=True)
+                    logger.info("Streaming event in runv3: %s", payload)
+                    yield ServerSentEvent(
+                        data=payload,
+                        event="agent_event",
+                        id=getattr(item, 'id', None)  # Use event ID if available
+                    )
 
-                payload = item.model_dump_json(exclude_none=True, by_alias=True)
-                logger.info("Streaming event in runv3: %s", payload)
-                yield f"data: {payload}\n\n"
-
-            yield 'data: {"type":"stream_complete"}\n\n'
+            # Stream completion event
+            yield ServerSentEvent(
+                data='{"type":"stream_complete"}',
+                event="stream_complete"
+            )
         except asyncio.CancelledError:
             logger.warning("Client disconnected mid-stream, but agent continues running")
             # Agent keeps running to preserve MCP session - this is the key fix!
             pass
         except Exception as e:
             logger.exception("Error in event_generator: %s", e)
-            yield f'data: {{"type":"error","error":"{str(e)}"}}\n\n'
+            yield ServerSentEvent(
+                data=f'{{"type":"error","error":"{str(e)}"}}',
+                event="error"
+            )
         finally:
             if not pump_task.done():
                 pump_task.cancel()
 
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream", 
-        headers=SSE_HEADERS
-    )
+    return EventSourceResponse(event_generator())
 
   @app.get(
       "/apps/{app_name}/users/{user_id}/sessions/{session_id}/events/{event_id}/graph",
