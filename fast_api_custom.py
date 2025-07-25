@@ -1022,7 +1022,7 @@ def get_fast_api_app(
                 if render_session_url:
                     # Send custom render_session event
                     yield ServerSentEvent(
-                        data=f'{{"url": "{render_session_url}"}}',
+                        data=f'{{"type": "render_session", "url": "{render_session_url}"}}',
                         event="render_session",
                         id=getattr(item, 'id', None)
                     )
