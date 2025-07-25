@@ -7,3 +7,4 @@ openinference-instrumentation-google-adk
 google-adk
 arize-phoenix-otel
 sse-starlette
+supabase
