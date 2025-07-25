@@ -1008,14 +1008,34 @@ def get_fast_api_app(
                 if item is None:  # sentinel => done
                     break
                 
+                # Check if this is a render_session function call (can be in any part)
+                item_dict = item.model_dump(exclude_none=True, by_alias=True)
+                render_session_url = None
                 
-                payload = item.model_dump_json(exclude_none=True, by_alias=True)
-                logger.info("Streaming event in runv3: %s", payload)
-                yield ServerSentEvent(
-                    data=payload,
-                    event="agent_event",
-                    id=getattr(item, 'id', None)  # Use event ID if available
-                )
+                # Look through all parts for render_session function call
+                if item_dict.get("content", {}).get("parts"):
+                    for part in item_dict["content"]["parts"]:
+                        if (part.get("functionCall", {}).get("name") == "render_session"):
+                            render_session_url = part["functionCall"].get("args", {}).get("url", "")
+                            break
+                
+                if render_session_url:
+                    # Send custom render_session event
+                    yield ServerSentEvent(
+                        data=f'{{"url": "{render_session_url}"}}',
+                        event="render_session",
+                        id=getattr(item, 'id', None)
+                    )
+                    logger.info("Sent render_session event with URL: %s", render_session_url)
+                else:
+                    # Send regular agent event
+                    payload = item.model_dump_json(exclude_none=True, by_alias=True)
+                    logger.info("Streaming event in runv3: %s", payload)
+                    yield ServerSentEvent(
+                        data=payload,
+                        event="agent_event",
+                        id=getattr(item, 'id', None)  # Use event ID if available
+                    )
 
             # Stream completion event
             yield ServerSentEvent(

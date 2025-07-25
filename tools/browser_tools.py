@@ -11,9 +11,9 @@ server_params = StdioServerParameters(
                     "--proxies"
                 ],
                 env={
-                    "BROWSERBASE_API_KEY": "bb_live_0v1p3jlrC1Uk3_tqv2aojY8NMtk",
-                    "BROWSERBASE_PROJECT_ID": "22907d6d-c9a3-4842-930f-59f76067903a",
-                    "GEMINI_API_KEY": "AIzaSyCRPS-JHsmOUfeWggUGmR97WbkSsB3wN7s"
+                    "BROWSERBASE_API_KEY": os.getenv("BROWSERBASE_API_KEY"),
+                    "BROWSERBASE_PROJECT_ID": os.getenv("BROWSERBASE_PROJECT_ID"),
+                    "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY")
                 }
             )
 connection_params = StdioConnectionParams(
