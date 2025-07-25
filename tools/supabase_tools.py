@@ -1,949 +1,867 @@
-"""
-Supabase CRUD Tools for Artha Project
-Provides comprehensive database operations for all tables in the Artha Supabase project.
-"""
-
-import logging
 import os
+import logging
+from typing import Dict, List, Optional, Any
 from datetime import datetime
-from typing import Dict, List, Optional, Any, Union
-
 from supabase import create_client, Client
-from supabase.client import ClientOptions
+from google.adk.tools import ToolContext
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class SupabaseManager:
+# Initialize Supabase client
+def get_supabase_client() -> Client:
+    """Initialize and return Supabase client"""
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_KEY")
+
+    if not url or not key:
+        raise ValueError("SUPABASE_URL and SUPABASE_KEY environment variables are required")
+
+    return create_client(url, key)
+
+
+# ============================================================================
+# GOALS TABLE CRUD OPERATIONS
+# ============================================================================
+
+def create_goal(
+        title: str,
+        tool_context: ToolContext,
+        description: Optional[str] = None,
+        category: Optional[str] = None,
+        target_amount: Optional[float] = None,
+        current_amount: float = 0.0,
+        target_date: Optional[str] = None,
+        status: str = "active",
+        frequency: Optional[str] = None,
+        streak_count: int = 0
+) -> Dict[str, Any]:
     """
-    Comprehensive Supabase database manager for the Artha project.
+    Create a new goal for a user in the goals table.
     
-    This class provides a complete set of CRUD operations for all tables in the Artha Supabase database,
-    including goals, achievements, user states, profiles, and generic table operations.
-    
-    Environment Variables Required:
-        SUPABASE_URL: Your Supabase project URL (e.g., https://xxx.supabase.co)
-        SUPABASE_KEY: Your Supabase anon/service role key
-    
-    Features:
-        - Automatic error handling and logging
-        - Type hints for better IDE support
-        - Specialized methods for each table
-        - Generic methods for flexible operations
-        - Connection timeout configuration
-    
-    Example:
-        manager = SupabaseManager()
-        goals = manager.get_user_goals("user-uuid")
-    """
-
-    def __init__(self):
-        """
-        Initialize Supabase client with environment variables.
-        
-        Raises:
-            ValueError: If SUPABASE_URL or SUPABASE_KEY environment variables are not set
-            
-        Note:
-            The client is configured with 10-second timeouts for both PostgREST and Storage operations.
-        """
-        self.url = os.environ.get("SUPABASE_URL")
-        self.key = os.environ.get("SUPABASE_KEY")
-
-        if not self.url or not self.key:
-            raise ValueError("SUPABASE_URL and SUPABASE_KEY environment variables are required")
-
-        # Initialize client with timeout options
-        self.client: Client = create_client(
-            self.url,
-            self.key,
-            options=ClientOptions(
-                postgrest_client_timeout=10,
-                storage_client_timeout=10,
-                schema="public"
-            )
-        )
-        logger.info("Supabase client initialized successfully")
-
-    def _handle_response(self, response, operation: str):
-        """
-        Internal method to handle Supabase API responses and provide consistent error handling.
-        
-        Args:
-            response: The response object from Supabase API call
-            operation (str): Description of the operation being performed (for logging)
-            
-        Returns:
-            The data from the response if successful
-            
-        Raises:
-            Exception: If the response indicates an error or contains no data
-            
-        Note:
-            This method automatically logs successful operations and detailed error information.
-        """
-        if hasattr(response, 'data') and response.data is not None:
-            logger.info(f"{operation} successful")
-            return response.data
-        else:
-            error_msg = f"{operation} failed"
-            if hasattr(response, 'error') and response.error:
-                error_msg += f": {response.error}"
-            logger.error(error_msg)
-            raise Exception(error_msg)
-
-    # ============= GOALS TABLE OPERATIONS =============
-
-    def create_goal(self, goal_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Create a new goal in the goals table.
-        
-        This method creates a new goal record with comprehensive tracking capabilities for both
-        financial goals (savings, investments) and habit-based goals (exercise, reading).
-        
-        Args:
-            goal_data (Dict[str, Any]): Dictionary containing goal information with the following structure:
-                
-                Required fields:
-                    user_id (str): UUID of the user creating the goal
-                    title (str): Clear, descriptive title of the goal
-                    goal_type (str): Type of goal (e.g., 'savings', 'investment', 'habit', 'fitness')
-                    category (str): Category for organization (e.g., 'financial', 'health', 'personal')
-                
-                Optional fields:
-                    description (str): Detailed description of the goal
-                    status (str): Goal status ('active', 'completed', 'paused') - defaults to 'active'
-                    deadline (str): Target completion date in ISO format (YYYY-MM-DD)
-                    target_amount (float): Financial target amount for money-based goals
-                    current_amount (float): Starting amount - defaults to 0.00
-                    monthly_contribution (float): Expected monthly contribution amount
-                    target_count (int): Target count for habit-based goals (e.g., days, repetitions)
-                    current_count (int): Starting count - defaults to 0
-                    frequency (str): How often to track ('daily', 'weekly', 'monthly')
-                    xp_value (int): Experience points awarded for completion - defaults to 0
-                    ai_metadata (dict): Additional AI-specific data as JSON object
-        
-        Returns:
-            Dict[str, Any]: The created goal record including auto-generated fields:
-                - id: Auto-generated unique goal ID
-                - created_at: Timestamp when goal was created
-                - updated_at: Timestamp when goal was last updated
-                - All provided goal_data fields
-        
-        Raises:
-            Exception: If goal creation fails due to validation errors or database issues
-            
-        Example:
-            goal_data = {
-                "user_id": "123e4567-e89b-12d3-a456-426614174000",
-                "title": "Emergency Fund",
-                "description": "Build 6-month emergency fund",
-                "goal_type": "savings",
-                "category": "financial",
-                "target_amount": 15000.00,
-                "monthly_contribution": 1000.00,
-                "deadline": "2024-12-31"
-            }
-            new_goal = manager.create_goal(goal_data)
-        """
-        try:
-            response = self.client.table("goals").insert(goal_data).execute()
-            return self._handle_response(response, "Goal creation")
-        except Exception as e:
-            logger.error(f"Error creating goal: {e}")
-            raise
-
-    def get_goal(self, goal_id: int) -> Optional[Dict[str, Any]]:
-        """
-        Retrieve a specific goal by its unique ID.
-        
-        Args:
-            goal_id (int): The unique identifier of the goal to retrieve
-            
-        Returns:
-            Optional[Dict[str, Any]]: Complete goal record if found, None if goal doesn't exist.
-                The returned dictionary contains all goal fields:
-                - id, user_id, title, description, goal_type, category
-                - status, deadline, xp_value
-                - target_amount, current_amount, monthly_contribution
-                - target_count, current_count, frequency
-                - streak_count, best_streak, last_completed
-                - ai_metadata, created_at, updated_at
-        
-        Raises:
-            Exception: If database query fails
-            
-        Example:
-            goal = manager.get_goal(123)
-            if goal:
-                print(f"Goal: {goal['title']} - Progress: {goal['current_amount']}/{goal['target_amount']}")
-            else:
-                print("Goal not found")
-        """
-        try:
-            response = self.client.table("goals").select("*").eq("id", goal_id).execute()
-            data = self._handle_response(response, "Goal retrieval")
-            return data[0] if data else None
-        except Exception as e:
-            logger.error(f"Error getting goal {goal_id}: {e}")
-            raise
-
-    def get_user_goals(self, user_id: str, status: Optional[str] = None) -> List[Dict[str, Any]]:
-        """
-        Retrieve all goals belonging to a specific user, optionally filtered by status.
-        
-        This method returns goals ordered by creation date (newest first) and is ideal for
-        displaying user dashboards, progress tracking, and goal management interfaces.
-        
-        Args:
-            user_id (str): UUID of the user whose goals to retrieve
-            status (Optional[str]): Filter goals by status. Valid values:
-                - 'active': Currently active goals (default if not specified)
-                - 'completed': Successfully completed goals
-                - 'paused': Temporarily paused goals
-                - None: Return all goals regardless of status
-                
-        Returns:
-            List[Dict[str, Any]]: List of goal records ordered by created_at (newest first).
-                Each goal dictionary contains all fields from the goals table.
-                Returns empty list if user has no goals or no goals match the status filter.
-        
-        Raises:
-            Exception: If database query fails or user_id is invalid
-            
-        Example:
-            # Get all active goals for a user
-            active_goals = manager.get_user_goals("user-uuid", "active")
-            
-            # Get all goals regardless of status
-            all_goals = manager.get_user_goals("user-uuid")
-            
-            # Display goal summary
-            for goal in active_goals:
-                progress = (goal['current_amount'] / goal['target_amount']) * 100 if goal['target_amount'] else 0
-                print(f"{goal['title']}: {progress:.1f}% complete")
-        """
-        try:
-            query = self.client.table("goals").select("*").eq("user_id", user_id)
-
-            if status:
-                query = query.eq("status", status)
-
-            response = query.order("created_at", desc=True).execute()
-            return self._handle_response(response, "User goals retrieval")
-        except Exception as e:
-            logger.error(f"Error getting user goals for {user_id}: {e}")
-            raise
-
-    def update_goal(self, goal_id: int, updates: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Update any fields of an existing goal.
-        
-        This method allows updating any goal fields and automatically sets the updated_at timestamp.
-        Use this for general goal modifications like changing title, description, target amounts, etc.
-        
-        Args:
-            goal_id (int): Unique identifier of the goal to update
-            updates (Dict[str, Any]): Dictionary of field names and new values to update.
-                Can include any valid goal table fields:
-                - title, description, goal_type, category, status
-                - deadline, target_amount, current_amount, monthly_contribution
-                - target_count, current_count, frequency
-                - xp_value, ai_metadata
-                
-        Returns:
-            Dict[str, Any]: The updated goal record with all current field values
-            
-        Raises:
-            Exception: If goal_id doesn't exist or update fails due to validation errors
-            
-        Note:
-            The updated_at field is automatically set to the current timestamp.
-            For progress-specific updates, consider using update_goal_progress() instead.
-            
-        Example:
-            # Update goal details
-            updates = {
-                "title": "Updated Emergency Fund Goal",
-                "target_amount": 20000.00,
-                "deadline": "2025-06-30",
-                "status": "active"
-            }
-            updated_goal = manager.update_goal(123, updates)
-            
-            # Update AI metadata
-            ai_updates = {
-                "ai_metadata": {
-                    "difficulty_level": "medium",
-                    "suggested_actions": ["increase monthly contribution", "review budget"]
-                }
-            }
-            manager.update_goal(123, ai_updates)
-        """
-        try:
-            # Add updated_at timestamp
-            updates["updated_at"] = datetime.now().isoformat()
-
-            response = self.client.table("goals").update(updates).eq("id", goal_id).execute()
-            return self._handle_response(response, "Goal update")
-        except Exception as e:
-            logger.error(f"Error updating goal {goal_id}: {e}")
-            raise
-
-    def update_goal_progress(self, goal_id: int, current_amount: Optional[float] = None,
-                             current_count: Optional[int] = None) -> Dict[str, Any]:
-        """
-        Update progress tracking fields for a goal.
-        
-        This specialized method is designed for frequent progress updates and automatically
-        handles timestamps for habit tracking. Use this instead of update_goal() when you're
-        specifically updating progress values.
-        
-        Args:
-            goal_id (int): Unique identifier of the goal to update
-            current_amount (Optional[float]): New current amount for financial goals.
-                Use this for savings goals, investment tracking, debt reduction, etc.
-                Should be a positive number representing the current progress toward target_amount.
-            current_count (Optional[int]): New current count for habit-based goals.
-                Use this for tracking repetitions, days completed, tasks finished, etc.
-                Should be a non-negative integer representing progress toward target_count.
-                
-        Returns:
-            Dict[str, Any]: The updated goal record with new progress values and timestamps
-            
-        Raises:
-            Exception: If goal_id doesn't exist or update fails
-            
-        Note:
-            - At least one of current_amount or current_count must be provided
-            - When current_count is updated, last_completed is automatically set to current timestamp
-            - updated_at is automatically set to current timestamp
-            - This method does NOT automatically update streak_count - use separate logic for streaks
-            
-        Example:
-            # Update financial goal progress
-            manager.update_goal_progress(123, current_amount=5000.00)
-            
-            # Update habit goal progress
-            manager.update_goal_progress(456, current_count=15)
-            
-            # Update both (for goals that track both metrics)
-            manager.update_goal_progress(789, current_amount=2500.00, current_count=30)
-            
-            # Check if goal is complete after update
-            updated_goal = manager.update_goal_progress(123, current_amount=10000.00)
-            if updated_goal['current_amount'] >= updated_goal['target_amount']:
-                manager.update_goal(123, {"status": "completed"})
-        """
-        updates = {"updated_at": datetime.now().isoformat()}
-
-        if current_amount is not None:
-            updates["current_amount"] = current_amount
-
-        if current_count is not None:
-            updates["current_count"] = current_count
-            updates["last_completed"] = datetime.now().isoformat()
-
-        return self.update_goal(goal_id, updates)
-
-    def delete_goal(self, goal_id: int) -> bool:
-        """
-        Permanently delete a goal from the database.
-        
-        WARNING: This operation is irreversible. Consider updating the goal status to 'paused' 
-        or 'cancelled' instead if you want to preserve the record for historical purposes.
-        
-        Args:
-            goal_id (int): Unique identifier of the goal to delete
-            
-        Returns:
-            bool: True if the goal was successfully deleted
-            
-        Raises:
-            Exception: If goal_id doesn't exist or deletion fails due to database constraints
-            
-        Example:
-            # Delete a goal (use with caution)
-            success = manager.delete_goal(123)
-            if success:
-                print("Goal deleted successfully")
-                
-            # Alternative: Mark as cancelled instead of deleting
-            manager.update_goal(123, {"status": "cancelled"})
-        """
-        try:
-            response = self.client.table("goals").delete().eq("id", goal_id).execute()
-            self._handle_response(response, "Goal deletion")
-            return True
-        except Exception as e:
-            logger.error(f"Error deleting goal {goal_id}: {e}")
-            raise
-
-    def get_goals_by_category(self, user_id: str, category: str) -> List[Dict[str, Any]]:
-        """
-        Retrieve all goals for a specific user filtered by category.
-        
-        This method is useful for organizing goals by type (financial, health, personal, etc.)
-        and displaying category-specific dashboards or reports.
-        
-        Args:
-            user_id (str): UUID of the user whose goals to retrieve
-            category (str): Category to filter by (e.g., 'financial', 'health', 'personal', 'career')
-            
-        Returns:
-            List[Dict[str, Any]]: List of goal records in the specified category,
-                ordered by creation date (newest first). Returns empty list if no goals
-                exist in the specified category for the user.
-        
-        Raises:
-            Exception: If database query fails
-            
-        Example:
-            # Get all financial goals
-            financial_goals = manager.get_goals_by_category("user-uuid", "financial")
-            
-            # Calculate total financial targets
-            total_target = sum(goal.get('target_amount', 0) for goal in financial_goals)
-            total_current = sum(goal.get('current_amount', 0) for goal in financial_goals)
-            
-            print(f"Financial Goals Progress: ${total_current:,.2f} / ${total_target:,.2f}")
-        """
-        try:
-            response = (self.client.table("goals")
-                        .select("*")
-                        .eq("user_id", user_id)
-                        .eq("category", category)
-                        .order("created_at", desc=True)
-                        .execute())
-            return self._handle_response(response, "Goals by category retrieval")
-        except Exception as e:
-            logger.error(f"Error getting goals by category {category}: {e}")
-            raise
-
-    # ============= ACHIEVEMENTS TABLE OPERATIONS =============
-
-    def create_achievement(self, achievement_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Create a new achievement record in the achievements table.
-        
-        Achievements are used to gamify the goal-setting experience and reward users
-        for reaching milestones, maintaining streaks, or completing specific challenges.
-        
-        Args:
-            achievement_data (Dict[str, Any]): Dictionary containing achievement information:
-                Required fields:
-                    user_id (str): UUID of the user earning the achievement
-                    title (str): Achievement title (e.g., "First Goal Created", "Savings Streak")
-                    
-                Optional fields:
-                    description (str): Detailed description of the achievement
-                    category (str): Achievement category (e.g., 'milestone', 'streak', 'completion')
-                    target_value (float): Target value required to unlock (if applicable)
-                    current_value (float): Current progress toward target - defaults to 0
-                    progress_percentage (float): Completion percentage (0-100)
-                    is_completed (bool): Whether achievement is unlocked - defaults to False
-                    unlocked_at (str): ISO timestamp when achievement was unlocked
-                    ai_metadata (dict): Additional AI-specific data
-        
-        Returns:
-            Dict[str, Any]: The created achievement record with auto-generated fields
-        
-        Raises:
-            Exception: If achievement creation fails
-            
-        Example:
-            achievement_data = {
-                "user_id": "user-uuid",
-                "title": "Goal Setter",
-                "description": "Created your first financial goal",
-                "category": "milestone",
-                "is_completed": True,
-                "unlocked_at": datetime.now().isoformat()
-            }
-            new_achievement = manager.create_achievement(achievement_data)
-        """
-        try:
-            response = self.client.table("achievements").insert(achievement_data).execute()
-            return self._handle_response(response, "Achievement creation")
-        except Exception as e:
-            logger.error(f"Error creating achievement: {e}")
-            raise
-
-    def get_user_achievements(self, user_id: str, is_completed: Optional[bool] = None) -> List[Dict[str, Any]]:
-        """
-        Retrieve achievements for a specific user, optionally filtered by completion status.
-        
-        This method is essential for displaying user progress, unlocked badges, and
-        available achievements in gamification systems.
-        
-        Args:
-            user_id (str): UUID of the user whose achievements to retrieve
-            is_completed (Optional[bool]): Filter by completion status:
-                - True: Only show unlocked/completed achievements
-                - False: Only show locked/incomplete achievements  
-                - None: Show all achievements regardless of status
-                
-        Returns:
-            List[Dict[str, Any]]: List of achievement records ordered by creation date (newest first).
-                Each achievement contains fields like id, title, description, progress_percentage,
-                is_completed, unlocked_at, etc.
-        
-        Raises:
-            Exception: If database query fails
-            
-        Example:
-            # Get all unlocked achievements
-            unlocked = manager.get_user_achievements("user-uuid", is_completed=True)
-            
-            # Get achievements still in progress
-            in_progress = manager.get_user_achievements("user-uuid", is_completed=False)
-            
-            # Display achievement summary
-            print(f"Unlocked: {len(unlocked)} achievements")
-            for achievement in unlocked:
-                print(f"🏆 {achievement['title']}: {achievement['description']}")
-        """
-        try:
-            query = self.client.table("achievements").select("*").eq("user_id", user_id)
-
-            if is_completed is not None:
-                query = query.eq("is_completed", is_completed)
-
-            response = query.order("created_at", desc=True).execute()
-            return self._handle_response(response, "User achievements retrieval")
-        except Exception as e:
-            logger.error(f"Error getting user achievements for {user_id}: {e}")
-            raise
-
-    def unlock_achievement(self, achievement_id: int) -> Dict[str, Any]:
-        """
-        Mark an achievement as completed/unlocked and set the unlock timestamp.
-        
-        This method is typically called when a user meets the criteria for an achievement,
-        such as completing their first goal, maintaining a streak, or reaching a milestone.
-        
-        Args:
-            achievement_id (int): Unique identifier of the achievement to unlock
-            
-        Returns:
-            Dict[str, Any]: The updated achievement record with is_completed=True,
-                unlocked_at timestamp, and updated_at timestamp
-        
-        Raises:
-            Exception: If achievement_id doesn't exist or update fails
-            
-        Example:
-            # Unlock an achievement when user completes first goal
-            unlocked_achievement = manager.unlock_achievement(456)
-            
-            # Send notification to user
-            print(f"🎉 Achievement Unlocked: {unlocked_achievement['title']}!")
-            
-            # Award XP or other rewards based on achievement
-            if 'xp_reward' in unlocked_achievement.get('ai_metadata', {}):
-                xp_earned = unlocked_achievement['ai_metadata']['xp_reward']
-                # Update user's total XP...
-        """
-        updates = {
-            "is_completed": True,
-            "unlocked_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat()
-        }
-
-        try:
-            response = self.client.table("achievements").update(updates).eq("id", achievement_id).execute()
-            return self._handle_response(response, "Achievement unlock")
-        except Exception as e:
-            logger.error(f"Error unlocking achievement {achievement_id}: {e}")
-            raise
-
-    # ============= USER_STATES TABLE OPERATIONS =============
-
-    def get_user_state(self, app_name: str, user_id: str) -> Optional[Dict[str, Any]]:
-        """Get user state for a specific app.
-        
-        Args:
-            app_name: Application name
-            user_id: User ID
-            
-        Returns:
-            User state data or None if not found
-        """
-        try:
-            response = (self.client.table("user_states")
-                        .select("*")
-                        .eq("app_name", app_name)
-                        .eq("user_id", user_id)
-                        .execute())
-            data = self._handle_response(response, "User state retrieval")
-            return data[0] if data else None
-        except Exception as e:
-            logger.error(f"Error getting user state for {app_name}/{user_id}: {e}")
-            raise
-
-    def upsert_user_state(self, app_name: str, user_id: str, state: Dict[str, Any]) -> Dict[str, Any]:
-        """Create or update user state.
-        
-        Args:
-            app_name: Application name
-            user_id: User ID
-            state: State data as JSON
-            
-        Returns:
-            User state data
-        """
-        try:
-            state_data = {
-                "app_name": app_name,
-                "user_id": user_id,
-                "state": state,
-                "update_time": datetime.now().isoformat()
-            }
-
-            response = (self.client.table("user_states")
-                        .upsert(state_data, on_conflict="app_name,user_id")
-                        .execute())
-            return self._handle_response(response, "User state upsert")
-        except Exception as e:
-            logger.error(f"Error upserting user state for {app_name}/{user_id}: {e}")
-            raise
-
-    # ============= PROFILES TABLE OPERATIONS =============
-
-    def get_profile(self, user_id: str) -> Optional[Dict[str, Any]]:
-        """Get user profile.
-        
-        Args:
-            user_id: User UUID
-            
-        Returns:
-            Profile data or None if not found
-        """
-        try:
-            response = self.client.table("profiles").select("*").eq("id", user_id).execute()
-            data = self._handle_response(response, "Profile retrieval")
-            return data[0] if data else None
-        except Exception as e:
-            logger.error(f"Error getting profile for {user_id}: {e}")
-            raise
-
-    def update_profile(self, user_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
-        """Update user profile.
-        
-        Args:
-            user_id: User UUID
-            updates: Dictionary of fields to update
-            
-        Returns:
-            Updated profile data
-        """
-        try:
-            updates["updated_at"] = datetime.now().isoformat()
-
-            response = self.client.table("profiles").update(updates).eq("id", user_id).execute()
-            return self._handle_response(response, "Profile update")
-        except Exception as e:
-            logger.error(f"Error updating profile for {user_id}: {e}")
-            raise
-
-    # ============= GENERIC TABLE OPERATIONS =============
-
-    def select_from_table(self, table_name: str, columns: str = "*",
-                          filters: Optional[Dict[str, Any]] = None,
-                          order_by: Optional[str] = None,
-                          limit: Optional[int] = None) -> List[Dict[str, Any]]:
-        """Generic select operation for any table.
-        
-        Args:
-            table_name: Name of the table
-            columns: Columns to select (default: "*")
-            filters: Dictionary of column:value filters
-            order_by: Column to order by
-            limit: Maximum number of records
-            
-        Returns:
-            List of records
-        """
-        try:
-            query = self.client.table(table_name).select(columns)
-
-            if filters:
-                for column, value in filters.items():
-                    query = query.eq(column, value)
-
-            if order_by:
-                query = query.order(order_by)
-
-            if limit:
-                query = query.limit(limit)
-
-            response = query.execute()
-            return self._handle_response(response, f"Select from {table_name}")
-        except Exception as e:
-            logger.error(f"Error selecting from {table_name}: {e}")
-            raise
-
-    def insert_into_table(self, table_name: str, data: Union[Dict[str, Any], List[Dict[str, Any]]]) -> List[
-        Dict[str, Any]]:
-        """Generic insert operation for any table.
-        
-        Args:
-            table_name: Name of the table
-            data: Data to insert (single record or list of records)
-            
-        Returns:
-            Inserted data
-        """
-        try:
-            response = self.client.table(table_name).insert(data).execute()
-            return self._handle_response(response, f"Insert into {table_name}")
-        except Exception as e:
-            logger.error(f"Error inserting into {table_name}: {e}")
-            raise
-
-    def update_table(self, table_name: str, updates: Dict[str, Any],
-                     filters: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Generic update operation for any table.
-        
-        Args:
-            table_name: Name of the table
-            updates: Dictionary of fields to update
-            filters: Dictionary of column:value filters for WHERE clause
-            
-        Returns:
-            Updated data
-        """
-        try:
-            query = self.client.table(table_name).update(updates)
-
-            for column, value in filters.items():
-                query = query.eq(column, value)
-
-            response = query.execute()
-            return self._handle_response(response, f"Update {table_name}")
-        except Exception as e:
-            logger.error(f"Error updating {table_name}: {e}")
-            raise
-
-    def delete_from_table(self, table_name: str, filters: Dict[str, Any]) -> bool:
-        """Generic delete operation for any table.
-        
-        Args:
-            table_name: Name of the table
-            filters: Dictionary of column:value filters for WHERE clause
-            
-        Returns:
-            True if deleted successfully
-        """
-        try:
-            query = self.client.table(table_name).delete()
-
-            for column, value in filters.items():
-                query = query.eq(column, value)
-
-            response = query.execute()
-            self._handle_response(response, f"Delete from {table_name}")
-            return True
-        except Exception as e:
-            logger.error(f"Error deleting from {table_name}: {e}")
-            raise
-
-    # ============= UTILITY METHODS =============
-
-    def execute_raw_sql(self, query: str) -> List[Dict[str, Any]]:
-        """Execute raw SQL query (use with caution).
-        
-        Args:
-            query: SQL query string
-            
-        Returns:
-            Query results
-        """
-        try:
-            response = self.client.rpc('execute_sql', {'query': query}).execute()
-            return self._handle_response(response, "Raw SQL execution")
-        except Exception as e:
-            logger.error(f"Error executing raw SQL: {e}")
-            raise
-
-    def get_table_count(self, table_name: str, filters: Optional[Dict[str, Any]] = None) -> int:
-        """Get count of records in a table.
-        
-        Args:
-            table_name: Name of the table
-            filters: Optional filters
-            
-        Returns:
-            Number of records
-        """
-        try:
-            query = self.client.table(table_name).select("*", count="exact")
-
-            if filters:
-                for column, value in filters.items():
-                    query = query.eq(column, value)
-
-            response = query.execute()
-            return response.count if hasattr(response, 'count') else 0
-        except Exception as e:
-            logger.error(f"Error getting count from {table_name}: {e}")
-            raise
-
-
-# ============= CONVENIENCE FUNCTIONS =============
-
-# Global instance for easy access
-_supabase_manager = None
-
-
-def get_supabase_manager() -> SupabaseManager:
-    """Get or create global SupabaseManager instance."""
-    global _supabase_manager
-    if _supabase_manager is None:
-        _supabase_manager = SupabaseManager()
-    return _supabase_manager
-
-
-# Quick access functions for common operations
-def create_goal(goal_data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Convenience function to create a goal using the global SupabaseManager instance.
-    
-    This is a shortcut for manager.create_goal() that automatically handles the
-    SupabaseManager initialization and provides the same functionality.
+    This function creates a financial or habit goal with tracking capabilities.
+    Goals can have target amounts, deadlines, categories, and progress tracking.
+    The user_id is automatically fetched from the ToolContext state.
     
     Args:
-        goal_data (Dict[str, Any]): Goal data dictionary (see SupabaseManager.create_goal for details)
-        
-    Returns:
-        Dict[str, Any]: Created goal record
-        
-    Example:
-        from tools.supabase_tools import create_goal
-        
-        goal = create_goal({
-            "user_id": "user-uuid",
-            "title": "Save $5000",
-            "goal_type": "savings",
-            "category": "financial",
-            "target_amount": 5000.00
-        })
-    """
-    return get_supabase_manager().create_goal(goal_data)
-
-
-def get_user_goals(user_id: str, status: Optional[str] = None) -> List[Dict[str, Any]]:
-    """
-    Convenience function to get user goals using the global SupabaseManager instance.
+        title (str): The title/name of the goal. Required.
+        tool_context (ToolContext): The tool context containing user state and session info. Required.
+        description (str, optional): Detailed description of the goal. Defaults to None.
+        category (str, optional): Category of the goal (e.g., 'savings', 'fitness', 'learning'). Defaults to None.
+        target_amount (float, optional): Target amount to achieve (for financial goals). Defaults to None.
+        current_amount (float, optional): Current progress amount. Defaults to 0.0.
+        target_date (str, optional): Target completion date in ISO format (YYYY-MM-DD). Defaults to None.
+        status (str, optional): Goal status ('active', 'paused', 'completed'). Defaults to 'active'.
+        frequency (str, optional): Frequency for habit goals ('daily', 'weekly', 'monthly'). Defaults to None.
+        streak_count (int, optional): Current streak count for habit goals. Defaults to 0.
     
-    Args:
-        user_id (str): User UUID
-        status (Optional[str]): Optional status filter ('active', 'completed', 'paused')
-        
     Returns:
-        List[Dict[str, Any]]: List of user goals
-        
-    Example:
-        from tools.supabase_tools import get_user_goals
-        
-        active_goals = get_user_goals("user-uuid", "active")
-        all_goals = get_user_goals("user-uuid")
-    """
-    return get_supabase_manager().get_user_goals(user_id, status)
-
-
-def update_goal_progress(goal_id: int, current_amount: Optional[float] = None,
-                         current_count: Optional[int] = None) -> Dict[str, Any]:
-    """
-    Convenience function to update goal progress using the global SupabaseManager instance.
+        Dict[str, Any]: The created goal object with all fields including auto-generated ID, 
+                       created_at timestamp, and other database fields. Returns None if creation fails.
     
-    Args:
-        goal_id (int): Goal ID to update
-        current_amount (Optional[float]): New current amount for financial goals
-        current_count (Optional[int]): New current count for habit goals
-        
-    Returns:
-        Dict[str, Any]: Updated goal record
-        
-    Example:
-        from tools.supabase_tools import update_goal_progress
-        
-        # Update savings progress
-        updated_goal = update_goal_progress(123, current_amount=2500.00)
-        
-        # Update habit progress
-        updated_goal = update_goal_progress(456, current_count=7)
-    """
-    return get_supabase_manager().update_goal_progress(goal_id, current_amount, current_count)
-
-
-def get_user_achievements(user_id: str, is_completed: Optional[bool] = None) -> List[Dict[str, Any]]:
-    """
-    Convenience function to get user achievements using the global SupabaseManager instance.
+    Raises:
+        ValueError: If SUPABASE_URL or SUPABASE_KEY environment variables are missing, or if user_id not found in context.
+        Exception: If database operation fails or network issues occur.
     
-    Args:
-        user_id (str): User UUID
-        is_completed (Optional[bool]): Filter by completion status
-        
-    Returns:
-        List[Dict[str, Any]]: List of user achievements
-        
     Example:
-        from tools.supabase_tools import get_user_achievements
-        
-        unlocked = get_user_achievements("user-uuid", is_completed=True)
-        all_achievements = get_user_achievements("user-uuid")
+        >>> goal = create_goal(
+        ...     title="Save for vacation",
+        ...     tool_context=tool_context,
+        ...     description="Save $5000 for Europe trip",
+        ...     category="savings",
+        ...     target_amount=5000.0,
+        ...     target_date="2024-12-31"
+        ... )
+        >>> print(goal['id'])  # Returns the generated goal ID
     """
-    return get_supabase_manager().get_user_achievements(user_id, is_completed)
-
-
-def unlock_achievement(achievement_id: int) -> Dict[str, Any]:
-    """
-    Convenience function to unlock an achievement using the global SupabaseManager instance.
-    
-    Args:
-        achievement_id (int): Achievement ID to unlock
-        
-    Returns:
-        Dict[str, Any]: Updated achievement record
-        
-    Example:
-        from tools.supabase_tools import unlock_achievement
-        
-        unlocked = unlock_achievement(789)
-        print(f"🎉 {unlocked['title']} unlocked!")
-    """
-    return get_supabase_manager().unlock_achievement(achievement_id)
-
-
-if __name__ == "__main__":
-    # Example usage
     try:
-        # Initialize manager
-        manager = SupabaseManager()
+        # Fetch user_id from ToolContext state
+        user = tool_context.state.to_dict()
+        user_id = user["user_id"]
+        if not user_id:
+            raise ValueError("user_id not found in ToolContext state. User authentication required.")
 
-        # Example: Create a goal
-        sample_goal = {
-            "user_id": "123e4567-e89b-12d3-a456-426614174000",
-            "title": "Save for Emergency Fund",
-            "description": "Build an emergency fund of $10,000",
-            "goal_type": "savings",
-            "category": "financial",
-            "target_amount": 10000.00,
-            "current_amount": 0.00,
-            "monthly_contribution": 500.00
+        supabase = get_supabase_client()
+
+        goal_data = {
+            "user_id": user_id,
+            "title": title,
+            "description": description,
+            "category": category,
+            "target_amount": target_amount,
+            "current_amount": current_amount,
+            "target_date": target_date,
+            "status": status,
+            "frequency": frequency,
+            "streak_count": streak_count,
+            "is_completed": False
         }
 
-        print("Supabase CRUD tools loaded successfully!")
-        print("Available methods:")
-        print("- Goals: create_goal, get_goal, get_user_goals, update_goal, delete_goal")
-        print("- Achievements: create_achievement, get_user_achievements, unlock_achievement")
-        print("- User States: get_user_state, upsert_user_state")
-        print("- Profiles: get_profile, update_profile")
-        print("- Generic: select_from_table, insert_into_table, update_table, delete_from_table")
+        # Remove None values
+        goal_data = {k: v for k, v in goal_data.items() if v is not None}
+
+        result = supabase.table("goals").insert(goal_data).execute()
+        logger.info(f"Created goal: {title} for user: {user_id}")
+        return result.data[0] if result.data else None
 
     except Exception as e:
-        print(f"Error initializing Supabase manager: {e}")
-        print("Make sure SUPABASE_URL and SUPABASE_KEY environment variables are set.")
+        logger.error(f"Error creating goal: {str(e)}")
+        raise
+
+
+def get_goal(goal_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Retrieve a specific goal by its unique ID.
+    
+    This function fetches a single goal record from the database using the goal's ID.
+    Useful for getting detailed information about a specific goal.
+    
+    Args:
+        goal_id (str): The unique identifier of the goal to retrieve. Required.
+    
+    Returns:
+        Optional[Dict[str, Any]]: The goal object containing all fields (id, user_id, title, 
+                                 description, category, target_amount, current_amount, 
+                                 target_date, status, frequency, streak_count, is_completed, 
+                                 created_at, updated_at). Returns None if goal not found.
+    
+    Raises:
+        ValueError: If SUPABASE_URL or SUPABASE_KEY environment variables are missing.
+        Exception: If database operation fails or network issues occur.
+    
+    Example:
+        >>> goal = get_goal("goal_123")
+        >>> if goal:
+        ...     print(f"Goal: {goal['title']}, Progress: {goal['current_amount']}/{goal['target_amount']}")
+        ... else:
+        ...     print("Goal not found")
+    """
+    try:
+        supabase = get_supabase_client()
+        result = supabase.table("goals").select("*").eq("id", goal_id).execute()
+
+        if result.data:
+            logger.info(f"Retrieved goal: {goal_id}")
+            return result.data[0]
+        return None
+
+    except Exception as e:
+        logger.error(f"Error retrieving goal {goal_id}: {str(e)}")
+        raise
+
+
+def get_user_goals(tool_context: ToolContext, status: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Retrieve all goals for the current user, with optional status filtering.
+    
+    This function fetches all goals belonging to the current user, ordered by creation date (newest first).
+    Can be filtered by goal status to get only active, completed, or paused goals.
+    The user_id is automatically fetched from the ToolContext state.
+    
+    Args:
+        tool_context (ToolContext): The tool context containing user state and session info. Required.
+        status (str, optional): Filter goals by status ('active', 'completed', 'paused'). 
+                               If None, returns all goals regardless of status. Defaults to None.
+    
+    Returns:
+        List[Dict[str, Any]]: List of goal objects, each containing all goal fields. 
+                             Returns empty list if no goals found. Goals are ordered by 
+                             created_at timestamp (newest first).
+    
+    Raises:
+        ValueError: If SUPABASE_URL or SUPABASE_KEY environment variables are missing, or if user_id not found in context.
+        Exception: If database operation fails or network issues occur.
+    
+    Example:
+        >>> # Get all goals for current user
+        >>> all_goals = get_user_goals(tool_context)
+        >>> print(f"User has {len(all_goals)} total goals")
+        >>> 
+        >>> # Get only active goals
+        >>> active_goals = get_user_goals(tool_context, status="active")
+        >>> print(f"User has {len(active_goals)} active goals")
+    """
+    try:
+        # Fetch user_id from ToolContext state
+        user = tool_context.state.to_dict()
+        user_id = user["user_id"]
+        if not user_id:
+            raise ValueError("user_id not found in ToolContext state. User authentication required.")
+
+        supabase = get_supabase_client()
+        query = supabase.table("goals").select("*").eq("user_id", user_id)
+
+        if status:
+            query = query.eq("status", status)
+
+        result = query.order("created_at", desc=True).execute()
+        logger.info(f"Retrieved {len(result.data)} goals for user: {user_id}")
+        return result.data
+
+    except Exception as e:
+        logger.error(f"Error retrieving goals for user {user_id}: {str(e)}")
+        raise
+
+
+def get_goals_by_category(tool_context: ToolContext, category: str) -> List[Dict[str, Any]]:
+    """
+    Retrieve all goals for the current user filtered by a specific category.
+    
+    This function fetches goals belonging to the current user that match a specific category.
+    Useful for organizing and displaying goals by type (e.g., financial, fitness, learning).
+    The user_id is automatically fetched from the ToolContext state.
+    
+    Args:
+        tool_context (ToolContext): The tool context containing user state and session info. Required.
+        category (str): The category to filter by (e.g., 'savings', 'fitness', 'learning', 
+                       'career', 'health'). Required.
+    
+    Returns:
+        List[Dict[str, Any]]: List of goal objects matching the specified category. 
+                             Returns empty list if no goals found in that category.
+    
+    Raises:
+        ValueError: If SUPABASE_URL or SUPABASE_KEY environment variables are missing, or if user_id not found in context.
+        Exception: If database operation fails or network issues occur.
+    
+    Example:
+        >>> # Get all savings goals
+        >>> savings_goals = get_goals_by_category(tool_context, "savings")
+        >>> for goal in savings_goals:
+        ...     print(f"Savings goal: {goal['title']} - ${goal['current_amount']}/${goal['target_amount']}")
+        >>> 
+        >>> # Get all fitness goals
+        >>> fitness_goals = get_goals_by_category(tool_context, "fitness")
+    """
+    try:
+        # Fetch user_id from ToolContext state
+        user = tool_context.state.to_dict()
+        user_id = user["user_id"]
+        if not user_id:
+            raise ValueError("user_id not found in ToolContext state. User authentication required.")
+
+        supabase = get_supabase_client()
+        result = supabase.table("goals").select("*").eq("user_id", user_id).eq("category", category).execute()
+        logger.info(f"Retrieved {len(result.data)} goals in category '{category}' for user: {user_id}")
+        return result.data
+
+    except Exception as e:
+        logger.error(f"Error retrieving goals by category for user {user_id}: {str(e)}")
+        raise
+
+
+def update_goal(goal_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    Update a goal with new data fields.
+    
+    This function updates any fields of an existing goal. The updated_at timestamp 
+    is automatically set to the current time. Can update any goal field including 
+    title, description, target amounts, status, etc.
+    
+    Args:
+        goal_id (str): The unique identifier of the goal to update. Required.
+        updates (Dict[str, Any]): Dictionary containing the fields to update and their new values.
+                                 Can include any goal field: 'title', 'description', 'category',
+                                 'target_amount', 'current_amount', 'target_date', 'status',
+                                 'frequency', 'streak_count', 'is_completed'. Required.
+    
+    Returns:
+        Optional[Dict[str, Any]]: The updated goal object with all fields including the new 
+                                 updated_at timestamp. Returns None if goal not found or update fails.
+    
+    Raises:
+        ValueError: If SUPABASE_URL or SUPABASE_KEY environment variables are missing.
+        Exception: If database operation fails or network issues occur.
+    
+    Example:
+        >>> # Update goal title and target amount
+        >>> updated_goal = update_goal("goal_123", {
+        ...     "title": "Save for dream vacation",
+        ...     "target_amount": 6000.0,
+        ...     "description": "Updated target for Europe trip"
+        ... })
+        >>> 
+        >>> # Mark goal as completed
+        >>> completed_goal = update_goal("goal_123", {
+        ...     "status": "completed",
+        ...     "is_completed": True
+        ... })
+    """
+    try:
+        supabase = get_supabase_client()
+
+        # Add updated_at timestamp
+        updates["updated_at"] = datetime.utcnow().isoformat()
+
+        result = supabase.table("goals").update(updates).eq("id", goal_id).execute()
+
+        if result.data:
+            logger.info(f"Updated goal: {goal_id}")
+            return result.data[0]
+        return None
+
+    except Exception as e:
+        logger.error(f"Error updating goal {goal_id}: {str(e)}")
+        raise
+
+
+def update_goal_progress(goal_id: str, current_amount: float, streak_count: Optional[int] = None) -> Optional[
+    Dict[str, Any]]:
+    """
+    Update the progress of a goal with automatic completion detection.
+    
+    This function updates the current progress amount and optionally the streak count.
+    It automatically marks the goal as completed if the current amount reaches or exceeds
+    the target amount. This is a specialized function for progress tracking.
+    
+    Args:
+        goal_id (str): The unique identifier of the goal to update progress for. Required.
+        current_amount (float): The new current progress amount. Required.
+        streak_count (int, optional): The new streak count for habit goals. If None, 
+                                     streak count is not updated. Defaults to None.
+    
+    Returns:
+        Optional[Dict[str, Any]]: The updated goal object with new progress values and 
+                                 potentially updated completion status. Returns None if 
+                                 goal not found or update fails.
+    
+    Raises:
+        ValueError: If SUPABASE_URL or SUPABASE_KEY environment variables are missing.
+        Exception: If database operation fails or network issues occur.
+    
+    Example:
+        >>> # Update savings goal progress
+        >>> updated_goal = update_goal_progress("goal_123", 3500.0)
+        >>> print(f"Progress: ${updated_goal['current_amount']}/${updated_goal['target_amount']}")
+        >>> 
+        >>> # Update habit goal with streak
+        >>> habit_goal = update_goal_progress("habit_456", 15.0, streak_count=7)
+        >>> print(f"Streak: {habit_goal['streak_count']} days")
+    """
+    try:
+        updates = {"current_amount": current_amount}
+
+        if streak_count is not None:
+            updates["streak_count"] = streak_count
+
+        # Check if goal is completed
+        goal = get_goal(goal_id)
+        if goal and goal.get("target_amount") and current_amount >= goal["target_amount"]:
+            updates["is_completed"] = True
+            updates["status"] = "completed"
+
+        return update_goal(goal_id, updates)
+
+    except Exception as e:
+        logger.error(f"Error updating goal progress {goal_id}: {str(e)}")
+        raise
+
+
+def delete_goal(goal_id: str) -> bool:
+    """
+    Delete a goal from the database.
+    
+    This function permanently removes a goal from the database. This action cannot be undone.
+    Use with caution as all goal data including progress history will be lost.
+    
+    Args:
+        goal_id (str): The unique identifier of the goal to delete. Required.
+    
+    Returns:
+        bool: True if the goal was successfully deleted, False if goal was not found 
+              or deletion failed.
+    
+    Raises:
+        ValueError: If SUPABASE_URL or SUPABASE_KEY environment variables are missing.
+        Exception: If database operation fails or network issues occur.
+    
+    Example:
+        >>> # Delete a goal
+        >>> success = delete_goal("goal_123")
+        >>> if success:
+        ...     print("Goal deleted successfully")
+        ... else:
+        ...     print("Goal not found or deletion failed")
+    """
+    try:
+        supabase = get_supabase_client()
+        result = supabase.table("goals").delete().eq("id", goal_id).execute()
+
+        if result.data:
+            logger.info(f"Deleted goal: {goal_id}")
+            return True
+        return False
+
+    except Exception as e:
+        logger.error(f"Error deleting goal {goal_id}: {str(e)}")
+        raise
+
+
+# ============================================================================
+# ACHIEVEMENTS TABLE CRUD OPERATIONS
+# ============================================================================
+
+def create_achievement(
+        title: str,
+        tool_context: ToolContext,
+        description: Optional[str] = None,
+        category: Optional[str] = None,
+        badge_icon: Optional[str] = None,
+        points: int = 0,
+        is_unlocked: bool = False
+) -> Dict[str, Any]:
+    """
+    Create a new achievement for the current user in the achievements table.
+    
+    This function creates an achievement badge that can be unlocked by users.
+    Achievements are part of the gamification system and can award points to users.
+    They can be created in locked state and unlocked later when conditions are met.
+    The user_id is automatically fetched from the ToolContext state.
+    
+    Args:
+        title (str): The title/name of the achievement. Required.
+        tool_context (ToolContext): The tool context containing user state and session info. Required.
+        description (str, optional): Detailed description of what the achievement represents. Defaults to None.
+        category (str, optional): Category of the achievement (e.g., 'savings', 'streak', 'milestone'). Defaults to None.
+        badge_icon (str, optional): Icon identifier or URL for the achievement badge. Defaults to None.
+        points (int, optional): Points awarded when this achievement is unlocked. Defaults to 0.
+        is_unlocked (bool, optional): Whether the achievement starts in unlocked state. Defaults to False.
+    
+    Returns:
+        Dict[str, Any]: The created achievement object with all fields including auto-generated ID,
+                       created_at timestamp, and other database fields. Returns None if creation fails.
+    
+    Raises:
+        ValueError: If SUPABASE_URL or SUPABASE_KEY environment variables are missing, or if user_id not found in context.
+        Exception: If database operation fails or network issues occur.
+    
+    Example:
+        >>> achievement = create_achievement(
+        ...     title="First Goal Creator",
+        ...     tool_context=tool_context,
+        ...     description="Created your first financial goal",
+        ...     category="milestone",
+        ...     badge_icon="🎯",
+        ...     points=50
+        ... )
+        >>> print(achievement['id'])  # Returns the generated achievement ID
+    """
+    try:
+        # Fetch user_id from ToolContext state
+        user = tool_context.state.to_dict()
+        user_id = user["user_id"]
+        if not user_id:
+            raise ValueError("user_id not found in ToolContext state. User authentication required.")
+
+        supabase = get_supabase_client()
+
+        achievement_data = {
+            "user_id": user_id,
+            "title": title,
+            "description": description,
+            "category": category,
+            "badge_icon": badge_icon,
+            "points": points,
+            "is_unlocked": is_unlocked
+        }
+
+        # Remove None values
+        achievement_data = {k: v for k, v in achievement_data.items() if v is not None}
+
+        result = supabase.table("achievements").insert(achievement_data).execute()
+        logger.info(f"Created achievement: {title} for user: {user_id}")
+        return result.data[0] if result.data else None
+
+    except Exception as e:
+        logger.error(f"Error creating achievement: {str(e)}")
+        raise
+
+
+def get_achievement(achievement_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Retrieve a specific achievement by its unique ID.
+    
+    This function fetches a single achievement record from the database using the achievement's ID.
+    Useful for getting detailed information about a specific achievement including its unlock status.
+    
+    Args:
+        achievement_id (str): The unique identifier of the achievement to retrieve. Required.
+    
+    Returns:
+        Optional[Dict[str, Any]]: The achievement object containing all fields (id, user_id, title,
+                                 description, category, badge_icon, points, is_unlocked, 
+                                 unlocked_at, created_by_ai_at, created_at, updated_at). 
+                                 Returns None if achievement not found.
+    
+    Raises:
+        ValueError: If SUPABASE_URL or SUPABASE_KEY environment variables are missing.
+        Exception: If database operation fails or network issues occur.
+    
+    Example:
+        >>> achievement = get_achievement("achievement_123")
+        >>> if achievement:
+        ...     status = "🔓 Unlocked" if achievement['is_unlocked'] else "🔒 Locked"
+        ...     print(f"{status} {achievement['title']} - {achievement['points']} points")
+        ... else:
+        ...     print("Achievement not found")
+    """
+    try:
+        supabase = get_supabase_client()
+        result = supabase.table("achievements").select("*").eq("id", achievement_id).execute()
+
+        if result.data:
+            logger.info(f"Retrieved achievement: {achievement_id}")
+            return result.data[0]
+        return None
+
+    except Exception as e:
+        logger.error(f"Error retrieving achievement {achievement_id}: {str(e)}")
+        raise
+
+
+def get_user_achievements(tool_context: ToolContext, is_unlocked: Optional[bool] = None) -> List[Dict[str, Any]]:
+    """
+    Retrieve all achievements for the current user, with optional unlock status filtering.
+    
+    This function fetches all achievements belonging to the current user, ordered by creation date (newest first).
+    Can be filtered by unlock status to get only unlocked or locked achievements.
+    The user_id is automatically fetched from the ToolContext state.
+    
+    Args:
+        tool_context (ToolContext): The tool context containing user state and session info. Required.
+        is_unlocked (bool, optional): Filter achievements by unlock status. True for unlocked 
+                                     achievements, False for locked achievements. If None, 
+                                     returns all achievements regardless of status. Defaults to None.
+    
+    Returns:
+        List[Dict[str, Any]]: List of achievement objects, each containing all achievement fields.
+                             Returns empty list if no achievements found. Achievements are ordered
+                             by created_at timestamp (newest first).
+    
+    Raises:
+        ValueError: If SUPABASE_URL or SUPABASE_KEY environment variables are missing, or if user_id not found in context.
+        Exception: If database operation fails or network issues occur.
+    
+    Example:
+        >>> # Get all achievements for current user
+        >>> all_achievements = get_user_achievements(tool_context)
+        >>> print(f"User has {len(all_achievements)} total achievements")
+        >>> 
+        >>> # Get only unlocked achievements
+        >>> unlocked = get_user_achievements(tool_context, is_unlocked=True)
+        >>> total_points = sum(a['points'] for a in unlocked)
+        >>> print(f"User has {len(unlocked)} unlocked achievements worth {total_points} points")
+    """
+    try:
+        # Fetch user_id from ToolContext state
+        user = tool_context.state.to_dict()
+        user_id = user["user_id"]
+        if not user_id:
+            raise ValueError("user_id not found in ToolContext state. User authentication required.")
+
+        supabase = get_supabase_client()
+        query = supabase.table("achievements").select("*").eq("user_id", user_id)
+
+        if is_unlocked is not None:
+            query = query.eq("is_unlocked", is_unlocked)
+
+        result = query.order("created_at", desc=True).execute()
+        logger.info(f"Retrieved {len(result.data)} achievements for user: {user_id}")
+        return result.data
+
+    except Exception as e:
+        logger.error(f"Error retrieving achievements for user {user_id}: {str(e)}")
+        raise
+
+
+def get_achievements_by_category(tool_context: ToolContext, category: str) -> List[Dict[str, Any]]:
+    """
+    Retrieve all achievements for the current user filtered by a specific category.
+    
+    This function fetches achievements belonging to the current user that match a specific category.
+    Useful for organizing and displaying achievements by type (e.g., savings milestones, streaks).
+    The user_id is automatically fetched from the ToolContext state.
+    
+    Args:
+        tool_context (ToolContext): The tool context containing user state and session info. Required.
+        category (str): The category to filter by (e.g., 'savings', 'streak', 'milestone', 
+                       'completion', 'consistency'). Required.
+    
+    Returns:
+        List[Dict[str, Any]]: List of achievement objects matching the specified category.
+                             Returns empty list if no achievements found in that category.
+    
+    Raises:
+        ValueError: If SUPABASE_URL or SUPABASE_KEY environment variables are missing, or if user_id not found in context.
+        Exception: If database operation fails or network issues occur.
+    
+    Example:
+        >>> # Get all savings-related achievements
+        >>> savings_achievements = get_achievements_by_category(tool_context, "savings")
+        >>> for achievement in savings_achievements:
+        ...     status = "✅" if achievement['is_unlocked'] else "⏳"
+        ...     print(f"{status} {achievement['title']} - {achievement['points']} points")
+        >>> 
+        >>> # Get all streak achievements
+        >>> streak_achievements = get_achievements_by_category(tool_context, "streak")
+    """
+    try:
+        # Fetch user_id from ToolContext state
+        user = tool_context.state.to_dict()
+        user_id = user["user_id"]
+        if not user_id:
+            raise ValueError("user_id not found in ToolContext state. User authentication required.")
+
+        supabase = get_supabase_client()
+        result = supabase.table("achievements").select("*").eq("user_id", user_id).eq("category", category).execute()
+        logger.info(f"Retrieved {len(result.data)} achievements in category '{category}' for user: {user_id}")
+        return result.data
+
+    except Exception as e:
+        logger.error(f"Error retrieving achievements by category for user {user_id}: {str(e)}")
+        raise
+
+
+def update_achievement(achievement_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    Update an achievement with new data fields.
+    
+    This function updates any fields of an existing achievement. The updated_at timestamp
+    is automatically set to the current time. Can update any achievement field including
+    title, description, points, unlock status, etc.
+    
+    Args:
+        achievement_id (str): The unique identifier of the achievement to update. Required.
+        updates (Dict[str, Any]): Dictionary containing the fields to update and their new values.
+                                 Can include any achievement field: 'title', 'description', 
+                                 'category', 'badge_icon', 'points', 'is_unlocked', 
+                                 'unlocked_at'. Required.
+    
+    Returns:
+        Optional[Dict[str, Any]]: The updated achievement object with all fields including the new
+                                 updated_at timestamp. Returns None if achievement not found or update fails.
+    
+    Raises:
+        ValueError: If SUPABASE_URL or SUPABASE_KEY environment variables are missing.
+        Exception: If database operation fails or network issues occur.
+    
+    Example:
+        >>> # Update achievement title and points
+        >>> updated_achievement = update_achievement("achievement_123", {
+        ...     "title": "Super Saver",
+        ...     "points": 100,
+        ...     "description": "Saved over $10,000 in total"
+        ... })
+        >>> 
+        >>> # Manually unlock an achievement
+        >>> unlocked_achievement = update_achievement("achievement_123", {
+        ...     "is_unlocked": True,
+        ...     "unlocked_at": "2024-01-15T10:30:00Z"
+        ... })
+    """
+    try:
+        supabase = get_supabase_client()
+
+        # Add updated_at timestamp
+        updates["updated_at"] = datetime.utcnow().isoformat()
+
+        result = supabase.table("achievements").update(updates).eq("id", achievement_id).execute()
+
+        if result.data:
+            logger.info(f"Updated achievement: {achievement_id}")
+            return result.data[0]
+        return None
+
+    except Exception as e:
+        logger.error(f"Error updating achievement {achievement_id}: {str(e)}")
+        raise
+
+
+def unlock_achievement(achievement_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Unlock an achievement and set the unlock timestamp.
+    
+    This function marks an achievement as unlocked and records the unlock timestamp.
+    This is a specialized function for the gamification system when achievement
+    conditions are met. The user will receive the points associated with this achievement.
+    
+    Args:
+        achievement_id (str): The unique identifier of the achievement to unlock. Required.
+    
+    Returns:
+        Optional[Dict[str, Any]]: The updated achievement object with is_unlocked=True and
+                                 unlocked_at timestamp set. Returns None if achievement not found
+                                 or unlock fails.
+    
+    Raises:
+        ValueError: If SUPABASE_URL or SUPABASE_KEY environment variables are missing.
+        Exception: If database operation fails or network issues occur.
+    
+    Example:
+        >>> # Unlock an achievement when user completes their first goal
+        >>> unlocked = unlock_achievement("achievement_123")
+        >>> if unlocked:
+        ...     print(f"🎉 Achievement unlocked: {unlocked['title']}!")
+        ...     print(f"You earned {unlocked['points']} points!")
+        ... else:
+        ...     print("Failed to unlock achievement")
+    """
+    try:
+        updates = {
+            "is_unlocked": True,
+            "unlocked_at": datetime.utcnow().isoformat()
+        }
+
+        return update_achievement(achievement_id, updates)
+
+    except Exception as e:
+        logger.error(f"Error unlocking achievement {achievement_id}: {str(e)}")
+        raise
+
+
+def delete_achievement(achievement_id: str) -> bool:
+    """
+    Delete an achievement from the database.
+    
+    This function permanently removes an achievement from the database. This action cannot be undone.
+    Use with caution as all achievement data including unlock history will be lost.
+    Note: Deleting unlocked achievements will also remove the points from the user's total.
+    
+    Args:
+        achievement_id (str): The unique identifier of the achievement to delete. Required.
+    
+    Returns:
+        bool: True if the achievement was successfully deleted, False if achievement was not found
+              or deletion failed.
+    
+    Raises:
+        ValueError: If SUPABASE_URL or SUPABASE_KEY environment variables are missing.
+        Exception: If database operation fails or network issues occur.
+    
+    Example:
+        >>> # Delete an achievement
+        >>> success = delete_achievement("achievement_123")
+        >>> if success:
+        ...     print("Achievement deleted successfully")
+        ... else:
+        ...     print("Achievement not found or deletion failed")
+    """
+    try:
+        supabase = get_supabase_client()
+        result = supabase.table("achievements").delete().eq("id", achievement_id).execute()
+
+        if result.data:
+            logger.info(f"Deleted achievement: {achievement_id}")
+            return True
+        return False
+
+    except Exception as e:
+        logger.error(f"Error deleting achievement {achievement_id}: {str(e)}")
+        raise
+
+
+# ============================================================================
+# UTILITY FUNCTIONS
+# ============================================================================
+
+def get_user_total_points(tool_context: ToolContext) -> int:
+    """
+    Calculate the total points earned by the current user from all unlocked achievements.
+    
+    This function retrieves all unlocked achievements for the current user and sums up their points.
+    This is useful for displaying user progress, leaderboards, or determining user level/rank
+    in the gamification system. The user_id is automatically fetched from the ToolContext state.
+    
+    Args:
+        tool_context (ToolContext): The tool context containing user state and session info. Required.
+    
+    Returns:
+        int: The total points earned from all unlocked achievements. Returns 0 if user has
+             no unlocked achievements or no achievements at all.
+    
+    Raises:
+        ValueError: If SUPABASE_URL or SUPABASE_KEY environment variables are missing, or if user_id not found in context.
+        Exception: If database operation fails or network issues occur.
+    
+    Example:
+        >>> total_points = get_user_total_points(tool_context)
+        >>> print(f"User has earned {total_points} total points")
+        >>> 
+        >>> # Use for user level calculation
+        >>> if total_points >= 1000:
+        ...     print("🏆 Gold Level User!")
+        >>> elif total_points >= 500:
+        ...     print("🥈 Silver Level User!")
+        >>> else:
+        ...     print("🥉 Bronze Level User!")
+    """
+    try:
+        achievements = get_user_achievements(tool_context, is_unlocked=True)
+        total_points = sum(achievement.get("points", 0) for achievement in achievements)
+
+        # Get user_id for logging
+        user = tool_context.state.to_dict()
+        user_id = user.get("user_id", "unknown")
+        logger.info(f"User {user_id} has {total_points} total points")
+        return total_points
+
+    except Exception as e:
+        user = tool_context.state.to_dict()
+        user_id = user.get("user_id", "unknown")
+        logger.error(f"Error calculating total points for user {user_id}: {str(e)}")
+        raise
+
+
+def get_goal_completion_rate(tool_context: ToolContext) -> float:
+    """
+    Calculate the goal completion rate percentage for the current user.
+    
+    This function calculates what percentage of the current user's goals have been completed.
+    It considers all goals (regardless of status) and determines how many are marked
+    as completed. This is useful for user progress analytics and motivation.
+    The user_id is automatically fetched from the ToolContext state.
+    
+    Args:
+        tool_context (ToolContext): The tool context containing user state and session info. Required.
+    
+    Returns:
+        float: The completion rate as a percentage (0.0 to 100.0). Returns 0.0 if user has
+               no goals or all goals are incomplete. Returns 100.0 if all goals are completed.
+    
+    Raises:
+        ValueError: If SUPABASE_URL or SUPABASE_KEY environment variables are missing, or if user_id not found in context.
+        Exception: If database operation fails or network issues occur.
+    
+    Example:
+        >>> completion_rate = get_goal_completion_rate(tool_context)
+        >>> print(f"User has completed {completion_rate:.1f}% of their goals")
+        >>> 
+        >>> # Use for progress feedback
+        >>> if completion_rate >= 80:
+        ...     print("🌟 Excellent progress! You're crushing your goals!")
+        >>> elif completion_rate >= 50:
+        ...     print("👍 Good progress! Keep it up!")
+        >>> else:
+        ...     print("💪 You've got this! Focus on completing your current goals.")
+    """
+    try:
+        all_goals = get_user_goals(tool_context)
+        if not all_goals:
+            return 0.0
+
+        completed_goals = [goal for goal in all_goals if goal.get("is_completed", False)]
+        completion_rate = len(completed_goals) / len(all_goals) * 100
+
+        # Get user_id for logging
+        user = tool_context.state.to_dict()
+        user_id = user.get("user_id", "unknown")
+        logger.info(f"User {user_id} has {completion_rate:.1f}% goal completion rate")
+        return completion_rate
+
+    except Exception as e:
+        user = tool_context.state.to_dict()
+        user_id = user.get("user_id", "unknown")
+        logger.error(f"Error calculating completion rate for user {user_id}: {str(e)}")
+        raise
