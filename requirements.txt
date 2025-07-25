@@ -6,3 +6,4 @@ psycopg2==2.9.10
 openinference-instrumentation-google-adk
 google-adk
 arize-phoenix-otel
+supabase
