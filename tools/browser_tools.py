@@ -21,6 +21,6 @@ connection_params = StdioConnectionParams(
     timeout=60.0*30.0,
 )
 
-toolset = MCPToolset(
+browser_automation_toolkit = MCPToolset(
             connection_params=connection_params,
         )

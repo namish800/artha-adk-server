@@ -8,3 +8,4 @@ google-adk
 arize-phoenix-otel
 sse-starlette
 supabase
+aikar

@@ -1,12 +1,6 @@
-from pprint import pprint
-from typing import Dict, Any, Optional
-
-from google.adk.agents.callback_context import CallbackContext
 from google.adk.agents.llm_agent import Agent
-from google.adk.tools.base_tool import BaseTool
-from google.adk.tools.tool_context import ToolContext
 
-from tools.fi_tools import toolset
+from tools.fi_tools import financial_data_toolkit
 from tools.supabase_tools import (
     create_goal,
     get_goal,
@@ -27,14 +21,13 @@ from tools.supabase_tools import (
 )
 from .prompts import goals_agent_prompt
 
-
 root_agent = Agent(
     model='gemini-2.5-pro',
     name='goals_agent',
     description='You are a helpful agent that can analyze the user\'s financial goals and provide insights and recommendations.',
     instruction=goals_agent_prompt,
     tools=[
-        toolset,
+        financial_data_toolkit,
         # Goals CRUD operations
         create_goal,
         get_goal,
