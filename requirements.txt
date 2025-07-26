@@ -9,3 +9,4 @@ arize-phoenix-otel
 sse-starlette
 supabase
 aikar
+mcp-neo4j-memory

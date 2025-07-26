@@ -79,7 +79,7 @@ def create_goal(
     try:
         # Fetch user_id from ToolContext state
         user = tool_context.state.to_dict()
-        user_id = user["user_id"]
+        user_id = user.get('state', {}).get('userId')
         if not user_id:
             raise ValueError("user_id not found in ToolContext state. User authentication required.")
 
@@ -186,7 +186,7 @@ def get_user_goals(tool_context: ToolContext, status: Optional[str] = None) -> L
     try:
         # Fetch user_id from ToolContext state
         user = tool_context.state.to_dict()
-        user_id = user["user_id"]
+        user_id = user.get('state', {}).get('userId')
         if not user_id:
             raise ValueError("user_id not found in ToolContext state. User authentication required.")
 
@@ -238,7 +238,7 @@ def get_goals_by_category(tool_context: ToolContext, category: str) -> List[Dict
     try:
         # Fetch user_id from ToolContext state
         user = tool_context.state.to_dict()
-        user_id = user["user_id"]
+        user_id = user.get('state', {}).get('userId')
         if not user_id:
             raise ValueError("user_id not found in ToolContext state. User authentication required.")
 
@@ -248,7 +248,7 @@ def get_goals_by_category(tool_context: ToolContext, category: str) -> List[Dict
         return result.data
 
     except Exception as e:
-        logger.error(f"Error retrieving goals by category for user {user_id}: {str(e)}")
+        logger.error(f"Error retrieving goals by category : {str(e)}")
         raise
 
 
@@ -451,7 +451,7 @@ def create_achievement(
     try:
         # Fetch user_id from ToolContext state
         user = tool_context.state.to_dict()
-        user_id = user["user_id"]
+        user_id = user.get('state', {}).get('userId')
         if not user_id:
             raise ValueError("user_id not found in ToolContext state. User authentication required.")
 
@@ -557,7 +557,7 @@ def get_user_achievements(tool_context: ToolContext, is_unlocked: Optional[bool]
     try:
         # Fetch user_id from ToolContext state
         user = tool_context.state.to_dict()
-        user_id = user["user_id"]
+        user_id = user.get('state', {}).get('userId')
         if not user_id:
             raise ValueError("user_id not found in ToolContext state. User authentication required.")
 
@@ -610,7 +610,7 @@ def get_achievements_by_category(tool_context: ToolContext, category: str) -> Li
     try:
         # Fetch user_id from ToolContext state
         user = tool_context.state.to_dict()
-        user_id = user["user_id"]
+        user_id = user.get('state', {}).get('userId')
         if not user_id:
             raise ValueError("user_id not found in ToolContext state. User authentication required.")
 
@@ -803,13 +803,13 @@ def get_user_total_points(tool_context: ToolContext) -> int:
 
         # Get user_id for logging
         user = tool_context.state.to_dict()
-        user_id = user.get("user_id", "unknown")
+        user_id = user.get('state', {}).get('userId', "unknown")
         logger.info(f"User {user_id} has {total_points} total points")
         return total_points
 
     except Exception as e:
         user = tool_context.state.to_dict()
-        user_id = user.get("user_id", "unknown")
+        user_id = user.get('state', {}).get('userId', "unknown")
         logger.error(f"Error calculating total points for user {user_id}: {str(e)}")
         raise
 
@@ -856,12 +856,12 @@ def get_goal_completion_rate(tool_context: ToolContext) -> float:
 
         # Get user_id for logging
         user = tool_context.state.to_dict()
-        user_id = user.get("user_id", "unknown")
+        user_id = user.get('state', {}).get('userId', "unknown")
         logger.info(f"User {user_id} has {completion_rate:.1f}% goal completion rate")
         return completion_rate
 
     except Exception as e:
         user = tool_context.state.to_dict()
-        user_id = user.get("user_id", "unknown")
+        user_id = user.get('state', {}).get('userId', "unknown")
         logger.error(f"Error calculating completion rate for user {user_id}: {str(e)}")
         raise

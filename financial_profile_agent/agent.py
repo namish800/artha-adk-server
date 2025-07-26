@@ -3,6 +3,7 @@ from google.adk.agents.llm_agent import Agent
 
 from tools import fi_toolset
 from financial_profile_agent.prompts import financial_profile_agent_prompt_2
+from tools.memory_tools import memory_toolkit
 
 # spending_analyzer_agent = Agent(
 #     model='gemini-2.0-flash',
@@ -25,7 +26,7 @@ root_agent = Agent(
     name='financial_profile_agent',
     description='A helpful agent that can analyze the user\'s financial profile',
     instruction=financial_profile_agent_prompt_2,
-    tools=[fi_toolset]
+    tools=[fi_toolset, memory_toolkit]
 )
 
 
