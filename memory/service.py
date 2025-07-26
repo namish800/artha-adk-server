@@ -65,7 +65,7 @@ async def main():
         ]
     )
     # await service.add_session_to_memory(session)
-    response: SearchMemoryResponse = await service.search_memory(app_name="fi_app", user_id="user123", query="user name")
+    response: SearchMemoryResponse = await service.search_memory(app_name="simple_agent", user_id="c5a8df11-1dfb-484b-a169-32a83d0b927a", query="Is user in debt?")
     print(response)
 
 if __name__ == "__main__":
